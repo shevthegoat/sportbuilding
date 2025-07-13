@@ -1,0 +1,8 @@
+This is a test file to demonstrate automatic pushing to GitHub.
+
+When this file is created or modified, the changes should be automatically:
+1. Staged by the pre-commit hook
+2. Committed with a timestamp
+3. Pushed to GitHub by the post-commit hook
+
+Created: $(date) 
