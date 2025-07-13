@@ -22,6 +22,19 @@ This script will:
 - Commit with a timestamp
 - Push to GitHub
 
+## Continuous Watching
+
+For continuous automatic pushing, you can run:
+
+```bash
+./watch-and-push.sh
+```
+
+This script will:
+- Watch for file changes every 5 seconds
+- Automatically commit and push when changes are detected
+- Run continuously until you stop it with Ctrl+C
+
 ## How it works
 
 - Any changes made to files in this repository will be automatically staged and committed
