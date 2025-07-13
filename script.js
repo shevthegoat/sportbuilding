@@ -4,6 +4,9 @@ class SocialMediaAnalyzer {
         this.analyzeBtn = document.getElementById('analyzeBtn');
         this.resultSection = document.getElementById('resultSection');
         this.loading = document.getElementById('loading');
+        this.analyzerSection = document.getElementById('analyzerSection');
+        this.startAnalyzingBtn = document.getElementById('startAnalyzingBtn');
+        this.backToInfoBtn = document.getElementById('backToInfoBtn');
         
         this.setupEventListeners();
     }
@@ -15,6 +18,44 @@ class SocialMediaAnalyzer {
                 this.analyzeLink();
             }
         });
+        
+        // Navigation buttons
+        this.startAnalyzingBtn.addEventListener('click', () => this.showAnalyzer());
+        this.backToInfoBtn.addEventListener('click', () => this.showInfo());
+    }
+
+    showAnalyzer() {
+        // Hide all sections except analyzer
+        document.querySelectorAll('section').forEach(section => {
+            if (section.classList.contains('analyzer-section')) {
+                section.style.display = 'block';
+            } else {
+                section.style.display = 'none';
+            }
+        });
+        
+        // Update header
+        document.querySelector('header h1').innerHTML = '<i class="fas fa-search"></i> Social Media Link Analyzer';
+        document.querySelector('header p').textContent = 'Paste a social media link to analyze if it\'s likely real or fake';
+    }
+
+    showInfo() {
+        // Show all sections except analyzer
+        document.querySelectorAll('section').forEach(section => {
+            if (section.classList.contains('analyzer-section')) {
+                section.style.display = 'none';
+            } else {
+                section.style.display = 'block';
+            }
+        });
+        
+        // Reset header
+        document.querySelector('header h1').innerHTML = '<i class="fas fa-shield-alt"></i> Social Media Truth Checker';
+        document.querySelector('header p').textContent = 'Understanding the Real Impact of Fake Content';
+        
+        // Hide results if they were showing
+        this.resultSection.style.display = 'none';
+        this.loading.style.display = 'none';
     }
 
     async analyzeLink() {
