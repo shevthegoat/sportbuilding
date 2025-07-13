@@ -122,30 +122,16 @@ class SocialMediaAnalyzer {
             });
         }
 
-        // Domain analysis
-        const domainScore = this.analyzeDomain(domain);
-        score += domainScore.points;
-        redFlags.push(...domainScore.redFlags);
-        greenFlags.push(...domainScore.greenFlags);
-        details.push(...domainScore.details);
+        // Comprehensive analysis with improved scoring
+        const analysisResults = this.comprehensiveAnalysis(urlObj, platform);
+        score += analysisResults.score;
+        redFlags.push(...analysisResults.redFlags);
+        greenFlags.push(...analysisResults.greenFlags);
+        details.push(...analysisResults.details);
 
-        // URL structure analysis
-        const urlScore = this.analyzeUrlStructure(urlObj);
-        score += urlScore.points;
-        redFlags.push(...urlScore.redFlags);
-        greenFlags.push(...urlScore.greenFlags);
-        details.push(...urlScore.details);
-
-        // Content analysis
-        const contentScore = this.analyzeContent(path, query);
-        score += contentScore.points;
-        redFlags.push(...contentScore.redFlags);
-        greenFlags.push(...contentScore.greenFlags);
-        details.push(...contentScore.details);
-
-        // Determine verdict
-        const verdict = this.determineVerdict(score);
-        const confidence = Math.min(Math.max(Math.abs(score) * 10, 0), 100);
+        // Determine verdict with improved logic
+        const verdict = this.determineVerdict(score, analysisResults);
+        const confidence = Math.min(Math.max(Math.abs(score) * 8, 0), 100);
 
         return {
             verdict,
@@ -157,6 +143,281 @@ class SocialMediaAnalyzer {
             platform,
             channelInfo
         };
+    }
+
+    comprehensiveAnalysis(urlObj, platform) {
+        let score = 0;
+        let redFlags = [];
+        let greenFlags = [];
+        let details = [];
+
+        const domain = urlObj.hostname.toLowerCase();
+        const path = urlObj.pathname.toLowerCase();
+        const query = urlObj.search.toLowerCase();
+        const fullUrl = urlObj.href.toLowerCase();
+
+        // 1. DOMAIN ANALYSIS (Weight: 30%)
+        const domainScore = this.analyzeDomainComprehensive(domain);
+        score += domainScore.points;
+        redFlags.push(...domainScore.redFlags);
+        greenFlags.push(...domainScore.greenFlags);
+        details.push(...domainScore.details);
+
+        // 2. URL STRUCTURE ANALYSIS (Weight: 25%)
+        const urlStructureScore = this.analyzeUrlStructureComprehensive(urlObj);
+        score += urlStructureScore.points;
+        redFlags.push(...urlStructureScore.redFlags);
+        greenFlags.push(...urlStructureScore.greenFlags);
+        details.push(...urlStructureScore.details);
+
+        // 3. CONTENT ANALYSIS (Weight: 25%)
+        const contentScore = this.analyzeContentComprehensive(path, query);
+        score += contentScore.points;
+        redFlags.push(...contentScore.redFlags);
+        greenFlags.push(...contentScore.greenFlags);
+        details.push(...contentScore.details);
+
+        // 4. PLATFORM-SPECIFIC ANALYSIS (Weight: 20%)
+        const platformScore = this.analyzePlatformSpecific(urlObj, platform);
+        score += platformScore.points;
+        redFlags.push(...platformScore.redFlags);
+        greenFlags.push(...platformScore.greenFlags);
+        details.push(...platformScore.details);
+
+        return { score, redFlags, greenFlags, details };
+    }
+
+    analyzeDomainComprehensive(domain) {
+        let points = 0;
+        let redFlags = [];
+        let greenFlags = [];
+        let details = [];
+
+        // Legitimate domains
+        const legitimateDomains = [
+            'youtube.com', 'youtu.be', 'instagram.com', 'tiktok.com',
+            'facebook.com', 'fb.com', 'twitter.com', 'x.com'
+        ];
+
+        const isLegitimate = legitimateDomains.some(legit => domain.includes(legit));
+        if (isLegitimate) {
+            points += 40;
+            greenFlags.push('Legitimate social media platform detected');
+        } else {
+            points -= 30;
+            redFlags.push('Unknown or suspicious domain');
+        }
+
+        // Suspicious patterns
+        const suspiciousPatterns = [
+            { pattern: /[0-9]{6,}/, points: -25, flag: 'Excessive numbers in domain' },
+            { pattern: /[a-z]{25,}/, points: -20, flag: 'Unusually long domain string' },
+            { pattern: /[a-z0-9]{40,}/, points: -25, flag: 'Very long alphanumeric domain' },
+            { pattern: /bit\.ly|tinyurl|goo\.gl|t\.co/, points: -15, flag: 'URL shortener detected' },
+            { pattern: /[a-z]+[0-9]+[a-z]+[0-9]+/, points: -20, flag: 'Suspicious alternating pattern' },
+            { pattern: /[^a-z0-9.-]/, points: -10, flag: 'Special characters in domain' }
+        ];
+
+        for (const { pattern, points: patternPoints, flag } of suspiciousPatterns) {
+            if (pattern.test(domain)) {
+                points += patternPoints;
+                redFlags.push(flag);
+            }
+        }
+
+        details.push({
+            title: 'Domain Analysis',
+            value: isLegitimate ? 'Legitimate platform' : 'Suspicious domain',
+            type: isLegitimate ? 'positive' : 'negative'
+        });
+
+        return { points, redFlags, greenFlags, details };
+    }
+
+    analyzeUrlStructureComprehensive(urlObj) {
+        let points = 0;
+        let redFlags = [];
+        let greenFlags = [];
+        let details = [];
+
+        const path = urlObj.pathname;
+        const query = urlObj.search;
+        const totalLength = urlObj.href.length;
+
+        // URL length analysis
+        if (totalLength > 300) {
+            points -= 20;
+            redFlags.push('Excessively long URL');
+        } else if (totalLength > 200) {
+            points -= 10;
+            redFlags.push('Unusually long URL');
+        } else if (totalLength < 30) {
+            points -= 5;
+            redFlags.push('Suspiciously short URL');
+        } else {
+            points += 10;
+            greenFlags.push('Reasonable URL length');
+        }
+
+        // Legitimate URL patterns
+        const legitimatePatterns = [
+            { pattern: /\/watch\?v=/, points: 15, flag: 'YouTube video pattern' },
+            { pattern: /\/p\//, points: 15, flag: 'Instagram post pattern' },
+            { pattern: /\/reel\//, points: 15, flag: 'Instagram reel pattern' },
+            { pattern: /\/@[a-zA-Z0-9_]+/, points: 10, flag: 'Username pattern' },
+            { pattern: /\/status\//, points: 15, flag: 'Twitter status pattern' },
+            { pattern: /\/video\//, points: 10, flag: 'Video content pattern' }
+        ];
+
+        for (const { pattern, points: patternPoints, flag } of legitimatePatterns) {
+            if (pattern.test(path)) {
+                points += patternPoints;
+                greenFlags.push(flag);
+                break;
+            }
+        }
+
+        // Suspicious URL patterns
+        const suspiciousPatterns = [
+            { pattern: /[0-9]{12,}/, points: -20, flag: 'Excessive numbers in URL' },
+            { pattern: /[a-z0-9]{60,}/, points: -25, flag: 'Very long URL string' },
+            { pattern: /[a-z]{30,}/, points: -15, flag: 'Unusually long alphabetic string' },
+            { pattern: /[^a-zA-Z0-9\/\?=&.-]/, points: -10, flag: 'Excessive special characters' }
+        ];
+
+        for (const { pattern, points: patternPoints, flag } of suspiciousPatterns) {
+            if (pattern.test(path + query)) {
+                points += patternPoints;
+                redFlags.push(flag);
+            }
+        }
+
+        details.push({
+            title: 'URL Structure',
+            value: totalLength > 200 ? 'Suspiciously long' : 'Normal length',
+            type: totalLength > 200 ? 'negative' : 'positive'
+        });
+
+        return { points, redFlags, greenFlags, details };
+    }
+
+    analyzeContentComprehensive(path, query) {
+        let points = 0;
+        let redFlags = [];
+        let greenFlags = [];
+        let details = [];
+
+        const content = path + query;
+
+        // Suspicious content keywords (high weight)
+        const highRiskKeywords = [
+            'earn', 'money', 'free', 'win', 'prize', 'lottery', 'crypto', 'bitcoin',
+            'investment', 'get-rich', 'make-money', 'urgent', 'limited', 'exclusive',
+            'secret', 'hidden', 'click', 'claim', 'verify', 'confirm', 'update'
+        ];
+
+        for (const word of highRiskKeywords) {
+            if (content.includes(word)) {
+                points -= 20;
+                redFlags.push(`High-risk keyword detected: "${word}"`);
+            }
+        }
+
+        // Medium risk keywords
+        const mediumRiskKeywords = [
+            'discount', 'offer', 'deal', 'sale', 'bonus', 'reward', 'gift',
+            'opportunity', 'chance', 'lucky', 'winner', 'selected'
+        ];
+
+        for (const word of mediumRiskKeywords) {
+            if (content.includes(word)) {
+                points -= 10;
+                redFlags.push(`Medium-risk keyword detected: "${word}"`);
+            }
+        }
+
+        // Legitimate content keywords
+        const legitimateKeywords = [
+            'watch', 'video', 'post', 'reel', 'story', 'status', 'user', 'profile',
+            'channel', 'page', 'photo', 'image', 'upload', 'share'
+        ];
+
+        for (const word of legitimateKeywords) {
+            if (content.includes(word)) {
+                points += 8;
+                greenFlags.push(`Legitimate content keyword: "${word}"`);
+            }
+        }
+
+        // Special character analysis
+        const specialCharCount = (content.match(/[^a-zA-Z0-9\/\?=&.-]/g) || []).length;
+        if (specialCharCount > 25) {
+            points -= 15;
+            redFlags.push('Excessive special characters');
+        } else if (specialCharCount > 15) {
+            points -= 8;
+            redFlags.push('High number of special characters');
+        }
+
+        details.push({
+            title: 'Content Analysis',
+            value: specialCharCount > 25 ? 'Suspicious content' : 'Normal content',
+            type: specialCharCount > 25 ? 'negative' : 'positive'
+        });
+
+        return { points, redFlags, greenFlags, details };
+    }
+
+    analyzePlatformSpecific(urlObj, platform) {
+        let points = 0;
+        let redFlags = [];
+        let greenFlags = [];
+        let details = [];
+
+        const path = urlObj.pathname;
+        const query = urlObj.search;
+
+        // Platform-specific legitimate patterns
+        if (platform.name === 'YouTube') {
+            if (path.includes('/watch') && query.includes('v=')) {
+                points += 20;
+                greenFlags.push('Valid YouTube video URL');
+            } else if (path.includes('/channel/') || path.includes('/user/') || path.includes('/c/') || path.includes('/@')) {
+                points += 15;
+                greenFlags.push('Valid YouTube channel URL');
+            }
+        } else if (platform.name === 'Instagram') {
+            if (path.includes('/p/') || path.includes('/reel/')) {
+                points += 20;
+                greenFlags.push('Valid Instagram post/reel URL');
+            }
+        } else if (platform.name === 'TikTok') {
+            if (path.includes('/@') || path.includes('/video/')) {
+                points += 20;
+                greenFlags.push('Valid TikTok URL');
+            }
+        } else if (platform.name === 'Twitter') {
+            if (path.includes('/status/')) {
+                points += 20;
+                greenFlags.push('Valid Twitter status URL');
+            }
+        }
+
+        // Platform-specific suspicious patterns
+        if (platform.name === 'YouTube') {
+            if (query.includes('list=') && !query.includes('v=')) {
+                points -= 10;
+                redFlags.push('YouTube playlist without video ID');
+            }
+        }
+
+        details.push({
+            title: 'Platform-Specific Analysis',
+            value: platform.name === 'Unknown Platform' ? 'Unknown platform' : `Valid ${platform.name} URL`,
+            type: platform.name === 'Unknown Platform' ? 'negative' : 'positive'
+        });
+
+        return { points, redFlags, greenFlags, details };
     }
 
     detectPlatform(domain) {
@@ -246,182 +507,40 @@ class SocialMediaAnalyzer {
         return null;
     }
 
-    analyzeDomain(domain) {
-        let points = 0;
-        let redFlags = [];
-        let greenFlags = [];
-        let details = [];
-
-        // Check for suspicious domain patterns
-        const suspiciousPatterns = [
-            /[0-9]{4,}/, // Many numbers
-            /[a-z]{20,}/, // Very long strings
-            /[a-z0-9]{30,}/, // Very long alphanumeric
-            /bit\.ly|tinyurl|goo\.gl|t\.co/, // URL shorteners
-            /[a-z]+[0-9]+[a-z]+[0-9]+/, // Alternating patterns
-        ];
-
-        for (const pattern of suspiciousPatterns) {
-            if (pattern.test(domain)) {
-                points -= 20;
-                redFlags.push('Suspicious domain pattern detected');
-            }
-        }
-
-        // Check for legitimate domains
-        const legitimateDomains = [
-            'youtube.com', 'youtu.be', 'instagram.com', 'tiktok.com',
-            'facebook.com', 'fb.com', 'twitter.com', 'x.com'
-        ];
-
-        const isLegitimate = legitimateDomains.some(legit => domain.includes(legit));
-        if (isLegitimate) {
-            points += 30;
-            greenFlags.push('Legitimate social media platform detected');
-        } else {
-            points -= 15;
-            redFlags.push('Unknown or suspicious domain');
-        }
-
-        details.push({
-            title: 'Domain Analysis',
-            value: isLegitimate ? 'Legitimate platform' : 'Suspicious domain',
-            type: isLegitimate ? 'positive' : 'negative'
-        });
-
-        return { points, redFlags, greenFlags, details };
-    }
-
-    analyzeUrlStructure(urlObj) {
-        let points = 0;
-        let redFlags = [];
-        let greenFlags = [];
-        let details = [];
-
-        const path = urlObj.pathname;
-        const query = urlObj.search;
-
-        // Check for suspicious URL patterns
-        const suspiciousPatterns = [
-            /[0-9]{10,}/, // Very long numbers
-            /[a-z0-9]{50,}/, // Very long strings
-            /[a-z]+[0-9]+[a-z]+[0-9]+/, // Alternating patterns
-            /[a-z]{20,}/, // Very long alphabetic strings
-        ];
-
-        for (const pattern of suspiciousPatterns) {
-            if (pattern.test(path + query)) {
-                points -= 15;
-                redFlags.push('Suspicious URL structure detected');
-            }
-        }
-
-        // Check for legitimate URL patterns
-        const legitimatePatterns = [
-            /\/watch\?v=/, // YouTube video
-            /\/p\//, // Instagram post
-            /\/reel\//, // Instagram reel
-            /\/@[a-zA-Z0-9_]+/, // Username patterns
-            /\/status\//, // Twitter status
-        ];
-
-        for (const pattern of legitimatePatterns) {
-            if (pattern.test(path)) {
-                points += 10;
-                greenFlags.push('Legitimate URL structure detected');
-                break;
-            }
-        }
-
-        // Check URL length
-        const totalLength = urlObj.href.length;
-        if (totalLength > 200) {
-            points -= 10;
-            redFlags.push('Unusually long URL');
-        } else if (totalLength < 50) {
-            points += 5;
-            greenFlags.push('Reasonable URL length');
-        }
-
-        details.push({
-            title: 'URL Structure',
-            value: totalLength > 200 ? 'Suspiciously long' : 'Normal length',
-            type: totalLength > 200 ? 'negative' : 'positive'
-        });
-
-        return { points, redFlags, greenFlags, details };
-    }
-
-    analyzeContent(path, query) {
-        let points = 0;
-        let redFlags = [];
-        let greenFlags = [];
-        let details = [];
-
-        const content = path + query;
-
-        // Check for suspicious content patterns
-        const suspiciousContent = [
-            'click', 'earn', 'money', 'free', 'win', 'prize', 'lottery',
-            'crypto', 'bitcoin', 'investment', 'get-rich', 'make-money',
-            'urgent', 'limited', 'exclusive', 'secret', 'hidden'
-        ];
-
-        for (const word of suspiciousContent) {
-            if (content.includes(word)) {
-                points -= 15;
-                redFlags.push(`Suspicious content detected: "${word}"`);
-            }
-        }
-
-        // Check for legitimate content patterns
-        const legitimateContent = [
-            'watch', 'video', 'post', 'reel', 'story', 'status',
-            'user', 'profile', 'channel', 'page'
-        ];
-
-        for (const word of legitimateContent) {
-            if (content.includes(word)) {
-                points += 5;
-                greenFlags.push(`Legitimate content detected: "${word}"`);
-            }
-        }
-
-        // Check for excessive special characters
-        const specialCharCount = (content.match(/[^a-zA-Z0-9\/\?=&]/g) || []).length;
-        if (specialCharCount > 20) {
-            points -= 10;
-            redFlags.push('Excessive special characters in URL');
-        }
-
-        details.push({
-            title: 'Content Analysis',
-            value: specialCharCount > 20 ? 'Suspicious content' : 'Normal content',
-            type: specialCharCount > 20 ? 'negative' : 'positive'
-        });
-
-        return { points, redFlags, greenFlags, details };
-    }
-
-    determineVerdict(score) {
-        if (score >= 20) {
+    determineVerdict(score, analysisResults) {
+        // More nuanced verdict system
+        if (score >= 30) {
             return {
                 title: 'Likely Real',
-                description: 'This link appears to be legitimate based on our analysis.',
+                description: 'This link appears to be legitimate based on our comprehensive analysis. It shows multiple positive indicators and few red flags.',
                 icon: 'fas fa-check-circle',
                 class: 'real'
             };
-        } else if (score <= -20) {
+        } else if (score >= 10) {
+            return {
+                title: 'Probably Real',
+                description: 'This link shows mostly legitimate characteristics with some minor concerns. Exercise normal caution.',
+                icon: 'fas fa-check-circle',
+                class: 'real'
+            };
+        } else if (score <= -30) {
             return {
                 title: 'Likely Fake',
-                description: 'This link shows multiple signs of being fake or suspicious.',
+                description: 'This link shows multiple strong indicators of being fake or suspicious. Avoid clicking and verify independently.',
                 icon: 'fas fa-times-circle',
+                class: 'fake'
+            };
+        } else if (score <= -10) {
+            return {
+                title: 'Suspicious',
+                description: 'This link has concerning characteristics that suggest it may be fake. Exercise extreme caution.',
+                icon: 'fas fa-exclamation-triangle',
                 class: 'fake'
             };
         } else {
             return {
                 title: 'Uncertain',
-                description: 'This link has mixed indicators. Exercise caution and verify independently.',
+                description: 'This link has mixed indicators. The analysis is inconclusive. Verify independently before proceeding.',
                 icon: 'fas fa-question-circle',
                 class: 'uncertain'
             };
