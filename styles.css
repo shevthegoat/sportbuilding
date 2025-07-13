@@ -12,7 +12,7 @@ body {
 }
 
 .container {
-    max-width: 1000px;
+    max-width: 1400px;
     margin: 0 auto;
     padding: 20px;
 }
@@ -34,9 +34,29 @@ header p {
     opacity: 0.9;
 }
 
+/* Main Layout */
+.main-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    align-items: start;
+}
+
+.left-side {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+}
+
+.right-side {
+    position: sticky;
+    top: 20px;
+    height: fit-content;
+}
+
 /* Problem Section */
 .problem-section {
-    margin-bottom: 30px;
+    margin-bottom: 0;
 }
 
 .problem-card {
@@ -65,7 +85,7 @@ header p {
 
 .impact-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    grid-template-columns: 1fr;
     gap: 20px;
 }
 
@@ -100,7 +120,7 @@ header p {
 
 /* How It Works Section */
 .how-it-works-section {
-    margin-bottom: 30px;
+    margin-bottom: 0;
 }
 
 .how-it-works-card {
@@ -156,7 +176,7 @@ header p {
 
 /* Statistics Section */
 .statistics-section {
-    margin-bottom: 30px;
+    margin-bottom: 0;
 }
 
 .statistics-card {
@@ -178,7 +198,7 @@ header p {
 
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
     gap: 20px;
 }
 
@@ -205,7 +225,7 @@ header p {
 
 /* Solution Section */
 .solution-section {
-    margin-bottom: 30px;
+    margin-bottom: 0;
 }
 
 .solution-card {
@@ -215,6 +235,10 @@ header p {
     box-shadow: 0 10px 30px rgba(0,0,0,0.2);
     text-align: center;
     border: 2px solid #28a745;
+    min-height: 400px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
 .solution-card h2 {
@@ -263,7 +287,7 @@ header p {
 
 /* Analyzer Section */
 .analyzer-section {
-    margin-bottom: 30px;
+    margin-bottom: 0;
 }
 
 .analyzer-card {
@@ -604,6 +628,17 @@ footer {
     color: white;
     opacity: 0.8;
     font-size: 0.9rem;
+}
+
+@media (max-width: 1200px) {
+    .main-layout {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+    
+    .right-side {
+        position: static;
+    }
 }
 
 @media (max-width: 768px) {

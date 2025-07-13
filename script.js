@@ -112,6 +112,16 @@ class SocialMediaAnalyzer {
             type: 'neutral'
         });
 
+        // Channel detection for videos
+        const channelInfo = this.detectChannel(urlObj, platform);
+        if (channelInfo) {
+            details.push({
+                title: 'Channel/Account',
+                value: channelInfo,
+                type: 'neutral'
+            });
+        }
+
         // Domain analysis
         const domainScore = this.analyzeDomain(domain);
         score += domainScore.points;
@@ -144,7 +154,8 @@ class SocialMediaAnalyzer {
             redFlags: [...new Set(redFlags)],
             greenFlags: [...new Set(greenFlags)],
             details,
-            platform
+            platform,
+            channelInfo
         };
     }
 
@@ -167,6 +178,72 @@ class SocialMediaAnalyzer {
         }
 
         return { name: 'Unknown Platform', type: 'unknown' };
+    }
+
+    detectChannel(urlObj, platform) {
+        const path = urlObj.pathname;
+        const query = urlObj.search;
+        
+        // YouTube channel detection
+        if (platform.name === 'YouTube') {
+            // Check for channel URL patterns
+            if (path.includes('/channel/')) {
+                const channelId = path.split('/channel/')[1]?.split('/')[0];
+                return `YouTube Channel ID: ${channelId}`;
+            }
+            
+            // Check for user URL patterns
+            if (path.includes('/user/')) {
+                const username = path.split('/user/')[1]?.split('/')[0];
+                return `YouTube User: ${username}`;
+            }
+            
+            // Check for custom URL patterns
+            if (path.includes('/c/') || path.includes('/@')) {
+                const customName = path.split('/').find(part => part.startsWith('c/') || part.startsWith('@'));
+                if (customName) {
+                    const name = customName.replace('c/', '').replace('@', '');
+                    return `YouTube Channel: ${name}`;
+                }
+            }
+            
+            // For regular video URLs, try to extract channel info from query params
+            if (query.includes('v=')) {
+                return 'YouTube Video (Channel info not available in URL)';
+            }
+        }
+        
+        // Instagram account detection
+        if (platform.name === 'Instagram') {
+            if (path.includes('/p/') || path.includes('/reel/')) {
+                const username = path.split('/')[1];
+                if (username && !username.includes('p') && !username.includes('reel')) {
+                    return `Instagram Account: @${username}`;
+                }
+            }
+        }
+        
+        // TikTok account detection
+        if (platform.name === 'TikTok') {
+            if (path.includes('/@')) {
+                const username = path.split('/@')[1]?.split('/')[0];
+                if (username) {
+                    return `TikTok Account: @${username}`;
+                }
+            }
+        }
+        
+        // Twitter/X account detection
+        if (platform.name === 'Twitter') {
+            if (path.includes('/status/')) {
+                const username = path.split('/')[1];
+                if (username && username !== 'status') {
+                    return `Twitter Account: @${username}`;
+                }
+            }
+        }
+        
+        return null;
     }
 
     analyzeDomain(domain) {
