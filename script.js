@@ -135,7 +135,16 @@ class SocialMediaAnalyzer {
 
         // Determine verdict with improved logic
         const verdict = this.determineVerdict(score, enhancedAnalysis);
-        const confidence = Math.min(Math.max(Math.abs(score) * 8, 0), 100);
+        
+        // Calculate base confidence
+        let confidence = Math.min(Math.max(Math.abs(score) * 8, 0), 100);
+        
+        // Reduce confidence if red flags are present
+        if (redFlags.length > 0) {
+            // Reduce confidence by 20-40% depending on number of red flags
+            const redFlagPenalty = Math.min(redFlags.length * 8, 40);
+            confidence = Math.max(confidence - redFlagPenalty, 10);
+        }
 
         return {
             verdict,
@@ -735,41 +744,85 @@ class SocialMediaAnalyzer {
     }
 
     determineVerdict(score, analysisResults) {
-        if (score >= 50) {
-            return {
-                title: 'Likely Real',
-                description: 'This link appears to be legitimate and safe to visit.',
-                icon: 'fas fa-check-circle',
-                class: 'real'
-            };
-        } else if (score >= 20) {
-            return {
-                title: 'Probably Real',
-                description: 'This link seems legitimate but exercise caution.',
-                icon: 'fas fa-check-circle',
-                class: 'real'
-            };
-        } else if (score >= -20) {
-            return {
-                title: 'Uncertain',
-                description: 'Unable to determine with confidence. Proceed with caution.',
-                icon: 'fas fa-question-circle',
-                class: 'uncertain'
-            };
-        } else if (score >= -50) {
-            return {
-                title: 'Suspicious',
-                description: 'This link shows concerning patterns. Avoid if possible.',
-                icon: 'fas fa-exclamation-triangle',
-                class: 'fake'
-            };
+        // Check if there are any red flags
+        const hasRedFlags = analysisResults.redFlags && analysisResults.redFlags.length > 0;
+        
+        // If there are red flags, automatically downgrade the verdict
+        if (hasRedFlags) {
+            if (score >= 50) {
+                return {
+                    title: 'Possibly Real',
+                    description: 'This link appears legitimate but has some concerning indicators. Exercise caution.',
+                    icon: 'fas fa-exclamation-triangle',
+                    class: 'uncertain'
+                };
+            } else if (score >= 20) {
+                return {
+                    title: 'Uncertain',
+                    description: 'This link has mixed indicators with some concerning patterns. Proceed with extreme caution.',
+                    icon: 'fas fa-question-circle',
+                    class: 'uncertain'
+                };
+            } else if (score >= -20) {
+                return {
+                    title: 'Suspicious',
+                    description: 'This link shows concerning patterns and red flags. Avoid if possible.',
+                    icon: 'fas fa-exclamation-triangle',
+                    class: 'fake'
+                };
+            } else if (score >= -50) {
+                return {
+                    title: 'Likely Fake',
+                    description: 'This link has multiple red flags and suspicious patterns. Do not visit.',
+                    icon: 'fas fa-times-circle',
+                    class: 'fake'
+                };
+            } else {
+                return {
+                    title: 'Definitely Fake',
+                    description: 'This link has numerous red flags and is likely malicious. Do not visit under any circumstances.',
+                    icon: 'fas fa-times-circle',
+                    class: 'fake'
+                };
+            }
         } else {
-            return {
-                title: 'Likely Fake',
-                description: 'This link appears to be fake or malicious. Do not visit.',
-                icon: 'fas fa-times-circle',
-                class: 'fake'
-            };
+            // No red flags - use original scoring
+            if (score >= 50) {
+                return {
+                    title: 'Likely Real',
+                    description: 'This link appears to be legitimate and safe to visit.',
+                    icon: 'fas fa-check-circle',
+                    class: 'real'
+                };
+            } else if (score >= 20) {
+                return {
+                    title: 'Probably Real',
+                    description: 'This link seems legitimate but exercise caution.',
+                    icon: 'fas fa-check-circle',
+                    class: 'real'
+                };
+            } else if (score >= -20) {
+                return {
+                    title: 'Uncertain',
+                    description: 'Unable to determine with confidence. Proceed with caution.',
+                    icon: 'fas fa-question-circle',
+                    class: 'uncertain'
+                };
+            } else if (score >= -50) {
+                return {
+                    title: 'Suspicious',
+                    description: 'This link shows concerning patterns. Avoid if possible.',
+                    icon: 'fas fa-exclamation-triangle',
+                    class: 'fake'
+                };
+            } else {
+                return {
+                    title: 'Likely Fake',
+                    description: 'This link appears to be fake or malicious. Do not visit.',
+                    icon: 'fas fa-times-circle',
+                    class: 'fake'
+                };
+            }
         }
     }
 
@@ -790,6 +843,12 @@ class SocialMediaAnalyzer {
         
         document.getElementById('verdictTitle').textContent = verdict.title;
         document.getElementById('verdictDescription').textContent = verdict.description;
+        
+        // Add warning if red flags are present
+        if (analysis.redFlags && analysis.redFlags.length > 0) {
+            const warningText = `⚠️ ${analysis.redFlags.length} red flag${analysis.redFlags.length > 1 ? 's' : ''} detected - confidence reduced`;
+            document.getElementById('verdictDescription').innerHTML += `<br><br><strong style="color: #dc143c;">${warningText}</strong>`;
+        }
         
         // Update analysis details
         const detailsGrid = document.getElementById('detailsGrid');
