@@ -1,3 +1,5 @@
+import API_CONFIG from './config.js';
+
 class SocialMediaAnalyzer {
     constructor() {
         this.urlInput = document.getElementById('urlInput');
@@ -7,6 +9,10 @@ class SocialMediaAnalyzer {
         this.analyzerSection = document.getElementById('analyzerSection');
         this.startAnalyzingBtn = document.getElementById('startAnalyzingBtn');
         this.backToInfoBtn = document.getElementById('backToInfoBtn');
+        
+        // API Keys from config
+        this.FIRECRAWL_API_KEY = API_CONFIG.FIRECRAWL_API_KEY;
+        this.YOUTUBE_API_KEY = API_CONFIG.YOUTUBE_API_KEY;
         
         this.setupEventListeners();
     }
@@ -77,6 +83,7 @@ class SocialMediaAnalyzer {
             const analysis = await this.performAnalysis(url);
             this.displayResults(analysis);
         } catch (error) {
+            console.error('Analysis error:', error);
             this.showError('An error occurred during analysis. Please try again.');
         }
     }
@@ -91,9 +98,6 @@ class SocialMediaAnalyzer {
     }
 
     async performAnalysis(url) {
-        // Simulate analysis delay
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
         const urlObj = new URL(url);
         const domain = urlObj.hostname.toLowerCase();
         const path = urlObj.pathname.toLowerCase();
@@ -112,6 +116,13 @@ class SocialMediaAnalyzer {
             type: 'neutral'
         });
 
+        // Enhanced analysis with APIs
+        const enhancedAnalysis = await this.enhancedAnalysis(urlObj, platform);
+        score += enhancedAnalysis.score;
+        redFlags.push(...enhancedAnalysis.redFlags);
+        greenFlags.push(...enhancedAnalysis.greenFlags);
+        details.push(...enhancedAnalysis.details);
+
         // Channel detection for videos
         const channelInfo = this.detectChannel(urlObj, platform);
         if (channelInfo) {
@@ -122,15 +133,8 @@ class SocialMediaAnalyzer {
             });
         }
 
-        // Comprehensive analysis with improved scoring
-        const analysisResults = this.comprehensiveAnalysis(urlObj, platform);
-        score += analysisResults.score;
-        redFlags.push(...analysisResults.redFlags);
-        greenFlags.push(...analysisResults.greenFlags);
-        details.push(...analysisResults.details);
-
         // Determine verdict with improved logic
-        const verdict = this.determineVerdict(score, analysisResults);
+        const verdict = this.determineVerdict(score, enhancedAnalysis);
         const confidence = Math.min(Math.max(Math.abs(score) * 8, 0), 100);
 
         return {
@@ -145,7 +149,7 @@ class SocialMediaAnalyzer {
         };
     }
 
-    comprehensiveAnalysis(urlObj, platform) {
+    async enhancedAnalysis(urlObj, platform) {
         let score = 0;
         let redFlags = [];
         let greenFlags = [];
@@ -156,21 +160,21 @@ class SocialMediaAnalyzer {
         const query = urlObj.search.toLowerCase();
         const fullUrl = urlObj.href.toLowerCase();
 
-        // 1. DOMAIN ANALYSIS (Weight: 30%)
+        // 1. DOMAIN ANALYSIS (Weight: 25%)
         const domainScore = this.analyzeDomainComprehensive(domain);
         score += domainScore.points;
         redFlags.push(...domainScore.redFlags);
         greenFlags.push(...domainScore.greenFlags);
         details.push(...domainScore.details);
 
-        // 2. URL STRUCTURE ANALYSIS (Weight: 25%)
+        // 2. URL STRUCTURE ANALYSIS (Weight: 20%)
         const urlStructureScore = this.analyzeUrlStructureComprehensive(urlObj);
         score += urlStructureScore.points;
         redFlags.push(...urlStructureScore.redFlags);
         greenFlags.push(...urlStructureScore.greenFlags);
         details.push(...urlStructureScore.details);
 
-        // 3. CONTENT ANALYSIS (Weight: 25%)
+        // 3. CONTENT ANALYSIS (Weight: 20%)
         const contentScore = this.analyzeContentComprehensive(path, query);
         score += contentScore.points;
         redFlags.push(...contentScore.redFlags);
@@ -184,7 +188,234 @@ class SocialMediaAnalyzer {
         greenFlags.push(...platformScore.greenFlags);
         details.push(...platformScore.details);
 
+        // 5. FIRE CRAWL WEB SCRAPING ANALYSIS (Weight: 15%)
+        try {
+            const firecrawlData = await this.analyzeWithFirecrawl(urlObj.href);
+            score += firecrawlData.points;
+            redFlags.push(...firecrawlData.redFlags);
+            greenFlags.push(...firecrawlData.greenFlags);
+            details.push(...firecrawlData.details);
+        } catch (error) {
+            console.warn('Firecrawl analysis failed:', error);
+            details.push({
+                title: 'Web Content Analysis',
+                value: 'Unable to analyze (API limit or error)',
+                type: 'neutral'
+            });
+        }
+
         return { score, redFlags, greenFlags, details };
+    }
+
+    async analyzeWithFirecrawl(url) {
+        let points = 0;
+        let redFlags = [];
+        let greenFlags = [];
+        let details = [];
+
+        try {
+            // Firecrawl API call
+            const response = await fetch('https://api.firecrawl.dev/scrape', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.FIRECRAWL_API_KEY}`
+                },
+                body: JSON.stringify({
+                    url: url,
+                    pageOptions: {
+                        onlyMainContent: true,
+                        includeHtml: true,
+                        includeMarkdown: true
+                    }
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Firecrawl API error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const content = data.data?.markdown || data.data?.html || '';
+            const title = data.data?.title || '';
+            const description = data.data?.description || '';
+
+            // Analyze scraped content
+            const contentAnalysis = this.analyzeScrapedContent(content, title, description);
+            points += contentAnalysis.points;
+            redFlags.push(...contentAnalysis.redFlags);
+            greenFlags.push(...contentAnalysis.greenFlags);
+
+            details.push({
+                title: 'Web Content Analysis',
+                value: contentAnalysis.summary,
+                type: contentAnalysis.points > 0 ? 'positive' : 'negative'
+            });
+
+        } catch (error) {
+            console.error('Firecrawl analysis error:', error);
+            // Fallback to basic analysis
+            points -= 5;
+            redFlags.push('Unable to verify web content');
+        }
+
+        return { points, redFlags, greenFlags, details };
+    }
+
+    analyzeScrapedContent(content, title, description) {
+        let points = 0;
+        let redFlags = [];
+        let greenFlags = [];
+        let summary = '';
+
+        const fullText = `${title} ${description} ${content}`.toLowerCase();
+
+        // Suspicious content patterns
+        const suspiciousPatterns = [
+            { pattern: /(click here|click now|click to win)/, points: -20, flag: 'Suspicious call-to-action detected' },
+            { pattern: /(free.*money|make.*money.*fast|earn.*money.*online)/, points: -25, flag: 'Money-making promises detected' },
+            { pattern: /(limited time|act now|don't miss out)/, points: -15, flag: 'Urgency tactics detected' },
+            { pattern: /(100% free|completely free|no cost)/, points: -10, flag: 'Excessive "free" claims' },
+            { pattern: /(guaranteed|promise|assure)/, points: -15, flag: 'Excessive guarantees' },
+            { pattern: /(bitcoin|crypto|investment.*scheme)/, points: -20, flag: 'Cryptocurrency investment content' },
+            { pattern: /(weight loss|diet.*pill|miracle.*cure)/, points: -15, flag: 'Suspicious health claims' },
+            { pattern: /(lottery|sweepstakes|winner)/, points: -20, flag: 'Lottery/sweepstakes content' }
+        ];
+
+        // Legitimate content patterns
+        const legitimatePatterns = [
+            { pattern: /(educational|tutorial|how to)/, points: 15, flag: 'Educational content detected' },
+            { pattern: /(news|article|report)/, points: 10, flag: 'News/article content' },
+            { pattern: /(official|verified|authentic)/, points: 10, flag: 'Official/verified content' },
+            { pattern: /(community|discussion|forum)/, points: 5, flag: 'Community content' }
+        ];
+
+        // Check suspicious patterns
+        for (const { pattern, points: patternPoints, flag } of suspiciousPatterns) {
+            if (pattern.test(fullText)) {
+                points += patternPoints;
+                redFlags.push(flag);
+            }
+        }
+
+        // Check legitimate patterns
+        for (const { pattern, points: patternPoints, flag } of legitimatePatterns) {
+            if (pattern.test(fullText)) {
+                points += patternPoints;
+                greenFlags.push(flag);
+            }
+        }
+
+        // Content quality analysis
+        if (content.length < 100) {
+            points -= 10;
+            redFlags.push('Very little content detected');
+        } else if (content.length > 1000) {
+            points += 5;
+            greenFlags.push('Substantial content detected');
+        }
+
+        // Title analysis
+        if (title && title.length > 10) {
+            points += 5;
+            greenFlags.push('Descriptive title found');
+        }
+
+        summary = points > 0 ? 'Content appears legitimate' : 'Suspicious content detected';
+        if (points === 0) summary = 'Neutral content analysis';
+
+        return { points, redFlags, greenFlags, summary };
+    }
+
+    async analyzeYouTubeVideo(videoId) {
+        if (!this.YOUTUBE_API_KEY || this.YOUTUBE_API_KEY === 'your_youtube_api_key_here') {
+            return null;
+        }
+
+        try {
+            const response = await fetch(
+                `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=${videoId}&key=${this.YOUTUBE_API_KEY}`
+            );
+
+            if (!response.ok) {
+                throw new Error(`YouTube API error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            
+            if (data.items && data.items.length > 0) {
+                const video = data.items[0];
+                const snippet = video.snippet;
+                const stats = video.statistics;
+
+                let points = 0;
+                let redFlags = [];
+                let greenFlags = [];
+                let details = [];
+
+                // Analyze video statistics
+                const viewCount = parseInt(stats.viewCount) || 0;
+                const likeCount = parseInt(stats.likeCount) || 0;
+                const dislikeCount = parseInt(stats.dislikeCount) || 0;
+                const commentCount = parseInt(stats.commentCount) || 0;
+
+                // Suspicious patterns in video data
+                if (viewCount < 100 && likeCount > 50) {
+                    points -= 20;
+                    redFlags.push('Suspicious engagement ratio (high likes, low views)');
+                }
+
+                if (viewCount > 10000 && likeCount < 10) {
+                    points -= 15;
+                    redFlags.push('Suspicious engagement ratio (high views, low likes)');
+                }
+
+                if (viewCount === 0 && likeCount > 0) {
+                    points -= 25;
+                    redFlags.push('Impossible engagement (likes without views)');
+                }
+
+                // Legitimate patterns
+                if (viewCount > 1000 && likeCount > 10) {
+                    points += 15;
+                    greenFlags.push('Healthy engagement ratio');
+                }
+
+                if (commentCount > 5) {
+                    points += 10;
+                    greenFlags.push('Active community engagement');
+                }
+
+                // Title analysis
+                const title = snippet.title.toLowerCase();
+                const suspiciousTitlePatterns = [
+                    /(click here|click now|click to win)/,
+                    /(free.*money|make.*money.*fast)/,
+                    /(limited time|act now)/,
+                    /(100% free|completely free)/
+                ];
+
+                for (const pattern of suspiciousTitlePatterns) {
+                    if (pattern.test(title)) {
+                        points -= 20;
+                        redFlags.push('Suspicious video title detected');
+                        break;
+                    }
+                }
+
+                details.push({
+                    title: 'YouTube Video Analysis',
+                    value: `Views: ${viewCount.toLocaleString()}, Likes: ${likeCount.toLocaleString()}`,
+                    type: points > 0 ? 'positive' : 'negative'
+                });
+
+                return { points, redFlags, greenFlags, details };
+            }
+        } catch (error) {
+            console.error('YouTube API error:', error);
+        }
+
+        return null;
     }
 
     analyzeDomainComprehensive(domain) {
@@ -248,54 +479,53 @@ class SocialMediaAnalyzer {
         if (totalLength > 300) {
             points -= 20;
             redFlags.push('Excessively long URL');
-        } else if (totalLength > 200) {
-            points -= 10;
-            redFlags.push('Unusually long URL');
-        } else if (totalLength < 30) {
-            points -= 5;
-            redFlags.push('Suspiciously short URL');
-        } else {
+        } else if (totalLength < 50) {
             points += 10;
-            greenFlags.push('Reasonable URL length');
+            greenFlags.push('Clean, short URL');
         }
 
-        // Legitimate URL patterns
-        const legitimatePatterns = [
-            { pattern: /\/watch\?v=/, points: 15, flag: 'YouTube video pattern' },
-            { pattern: /\/p\//, points: 15, flag: 'Instagram post pattern' },
-            { pattern: /\/reel\//, points: 15, flag: 'Instagram reel pattern' },
-            { pattern: /\/@[a-zA-Z0-9_]+/, points: 10, flag: 'Username pattern' },
-            { pattern: /\/status\//, points: 15, flag: 'Twitter status pattern' },
-            { pattern: /\/video\//, points: 10, flag: 'Video content pattern' }
-        ];
+        // Query parameter analysis
+        const queryParams = new URLSearchParams(query);
+        const paramCount = queryParams.size;
 
-        for (const { pattern, points: patternPoints, flag } of legitimatePatterns) {
-            if (pattern.test(path)) {
-                points += patternPoints;
-                greenFlags.push(flag);
-                break;
+        if (paramCount > 10) {
+            points -= 15;
+            redFlags.push('Excessive query parameters');
+        } else if (paramCount === 0) {
+            points += 5;
+            greenFlags.push('Clean URL without excessive parameters');
+        }
+
+        // Suspicious query parameters
+        const suspiciousParams = ['utm_source', 'utm_medium', 'utm_campaign', 'ref', 'source'];
+        let suspiciousParamCount = 0;
+
+        for (const param of suspiciousParams) {
+            if (queryParams.has(param)) {
+                suspiciousParamCount++;
             }
         }
 
-        // Suspicious URL patterns
-        const suspiciousPatterns = [
-            { pattern: /[0-9]{12,}/, points: -20, flag: 'Excessive numbers in URL' },
-            { pattern: /[a-z0-9]{60,}/, points: -25, flag: 'Very long URL string' },
-            { pattern: /[a-z]{30,}/, points: -15, flag: 'Unusually long alphabetic string' },
-            { pattern: /[^a-zA-Z0-9\/\?=&.-]/, points: -10, flag: 'Excessive special characters' }
-        ];
+        if (suspiciousParamCount > 2) {
+            points -= 10;
+            redFlags.push('Multiple tracking parameters detected');
+        }
 
-        for (const { pattern, points: patternPoints, flag } of suspiciousPatterns) {
-            if (pattern.test(path + query)) {
-                points += patternPoints;
-                redFlags.push(flag);
-            }
+        // Path analysis
+        if (path.includes('click') || path.includes('redirect')) {
+            points -= 20;
+            redFlags.push('Redirect path detected');
+        }
+
+        if (path.includes('ad') || path.includes('sponsored')) {
+            points -= 15;
+            redFlags.push('Advertising/sponsored content path');
         }
 
         details.push({
             title: 'URL Structure',
-            value: totalLength > 200 ? 'Suspiciously long' : 'Normal length',
-            type: totalLength > 200 ? 'negative' : 'positive'
+            value: `Length: ${totalLength} chars, Params: ${paramCount}`,
+            type: points > 0 ? 'positive' : 'negative'
         });
 
         return { points, redFlags, greenFlags, details };
@@ -307,62 +537,50 @@ class SocialMediaAnalyzer {
         let greenFlags = [];
         let details = [];
 
-        const content = path + query;
+        const fullContent = `${path} ${query}`.toLowerCase();
 
-        // Suspicious content keywords (high weight)
-        const highRiskKeywords = [
-            'earn', 'money', 'free', 'win', 'prize', 'lottery', 'crypto', 'bitcoin',
-            'investment', 'get-rich', 'make-money', 'urgent', 'limited', 'exclusive',
-            'secret', 'hidden', 'click', 'claim', 'verify', 'confirm', 'update'
+        // Suspicious content patterns
+        const suspiciousPatterns = [
+            { pattern: /(click|tap|press)/, points: -15, flag: 'Clickbait language detected' },
+            { pattern: /(free|gratis|no cost)/, points: -10, flag: 'Excessive "free" claims' },
+            { pattern: /(money|cash|dollar|profit)/, points: -15, flag: 'Money-focused content' },
+            { pattern: /(win|winner|prize|reward)/, points: -20, flag: 'Prize/winner claims' },
+            { pattern: /(limited|urgent|hurry)/, points: -15, flag: 'Urgency tactics' },
+            { pattern: /(guaranteed|promise|assure)/, points: -10, flag: 'Excessive guarantees' },
+            { pattern: /(bitcoin|crypto|investment)/, points: -20, flag: 'Cryptocurrency content' },
+            { pattern: /(weight loss|diet|miracle)/, points: -15, flag: 'Suspicious health claims' },
+            { pattern: /(lottery|sweepstakes)/, points: -25, flag: 'Lottery/sweepstakes content' },
+            { pattern: /(adult|xxx|porn)/, points: -30, flag: 'Adult content detected' }
         ];
 
-        for (const word of highRiskKeywords) {
-            if (content.includes(word)) {
-                points -= 20;
-                redFlags.push(`High-risk keyword detected: "${word}"`);
+        // Legitimate content patterns
+        const legitimatePatterns = [
+            { pattern: /(news|article|blog)/, points: 10, flag: 'News/article content' },
+            { pattern: /(tutorial|guide|how to)/, points: 15, flag: 'Educational content' },
+            { pattern: /(official|verified)/, points: 10, flag: 'Official content' },
+            { pattern: /(community|discussion)/, points: 5, flag: 'Community content' }
+        ];
+
+        // Check suspicious patterns
+        for (const { pattern, points: patternPoints, flag } of suspiciousPatterns) {
+            if (pattern.test(fullContent)) {
+                points += patternPoints;
+                redFlags.push(flag);
             }
         }
 
-        // Medium risk keywords
-        const mediumRiskKeywords = [
-            'discount', 'offer', 'deal', 'sale', 'bonus', 'reward', 'gift',
-            'opportunity', 'chance', 'lucky', 'winner', 'selected'
-        ];
-
-        for (const word of mediumRiskKeywords) {
-            if (content.includes(word)) {
-                points -= 10;
-                redFlags.push(`Medium-risk keyword detected: "${word}"`);
+        // Check legitimate patterns
+        for (const { pattern, points: patternPoints, flag } of legitimatePatterns) {
+            if (pattern.test(fullContent)) {
+                points += patternPoints;
+                greenFlags.push(flag);
             }
-        }
-
-        // Legitimate content keywords
-        const legitimateKeywords = [
-            'watch', 'video', 'post', 'reel', 'story', 'status', 'user', 'profile',
-            'channel', 'page', 'photo', 'image', 'upload', 'share'
-        ];
-
-        for (const word of legitimateKeywords) {
-            if (content.includes(word)) {
-                points += 8;
-                greenFlags.push(`Legitimate content keyword: "${word}"`);
-            }
-        }
-
-        // Special character analysis
-        const specialCharCount = (content.match(/[^a-zA-Z0-9\/\?=&.-]/g) || []).length;
-        if (specialCharCount > 25) {
-            points -= 15;
-            redFlags.push('Excessive special characters');
-        } else if (specialCharCount > 15) {
-            points -= 8;
-            redFlags.push('High number of special characters');
         }
 
         details.push({
             title: 'Content Analysis',
-            value: specialCharCount > 25 ? 'Suspicious content' : 'Normal content',
-            type: specialCharCount > 25 ? 'negative' : 'positive'
+            value: points > 0 ? 'Legitimate content patterns' : 'Suspicious content patterns',
+            type: points > 0 ? 'positive' : 'negative'
         });
 
         return { points, redFlags, greenFlags, details };
@@ -374,214 +592,223 @@ class SocialMediaAnalyzer {
         let greenFlags = [];
         let details = [];
 
-        const path = urlObj.pathname;
-        const query = urlObj.search;
+        const path = urlObj.pathname.toLowerCase();
+        const query = urlObj.search.toLowerCase();
 
-        // Platform-specific legitimate patterns
-        if (platform.name === 'YouTube') {
-            if (path.includes('/watch') && query.includes('v=')) {
-                points += 20;
-                greenFlags.push('Valid YouTube video URL');
-            } else if (path.includes('/channel/') || path.includes('/user/') || path.includes('/c/') || path.includes('/@')) {
-                points += 15;
-                greenFlags.push('Valid YouTube channel URL');
-            }
-        } else if (platform.name === 'Instagram') {
-            if (path.includes('/p/') || path.includes('/reel/')) {
-                points += 20;
-                greenFlags.push('Valid Instagram post/reel URL');
-            }
-        } else if (platform.name === 'TikTok') {
-            if (path.includes('/@') || path.includes('/video/')) {
-                points += 20;
-                greenFlags.push('Valid TikTok URL');
-            }
-        } else if (platform.name === 'Twitter') {
-            if (path.includes('/status/')) {
-                points += 20;
-                greenFlags.push('Valid Twitter status URL');
-            }
-        }
+        switch (platform.name) {
+            case 'YouTube':
+                // YouTube-specific analysis
+                if (path.includes('/watch')) {
+                    points += 10;
+                    greenFlags.push('Valid YouTube video URL');
+                } else if (path.includes('/channel') || path.includes('/user')) {
+                    points += 5;
+                    greenFlags.push('Valid YouTube channel URL');
+                }
 
-        // Platform-specific suspicious patterns
-        if (platform.name === 'YouTube') {
-            if (query.includes('list=') && !query.includes('v=')) {
-                points -= 10;
-                redFlags.push('YouTube playlist without video ID');
-            }
+                // Check for suspicious YouTube patterns
+                if (query.includes('utm_source') || query.includes('ref=')) {
+                    points -= 10;
+                    redFlags.push('YouTube URL with tracking parameters');
+                }
+                break;
+
+            case 'Instagram':
+                // Instagram-specific analysis
+                if (path.includes('/p/') || path.includes('/reel/')) {
+                    points += 10;
+                    greenFlags.push('Valid Instagram post URL');
+                } else if (path.includes('/stories/')) {
+                    points += 5;
+                    greenFlags.push('Valid Instagram story URL');
+                }
+
+                if (query.includes('utm_')) {
+                    points -= 10;
+                    redFlags.push('Instagram URL with tracking parameters');
+                }
+                break;
+
+            case 'TikTok':
+                // TikTok-specific analysis
+                if (path.includes('/video/')) {
+                    points += 10;
+                    greenFlags.push('Valid TikTok video URL');
+                }
+
+                if (query.includes('utm_')) {
+                    points -= 10;
+                    redFlags.push('TikTok URL with tracking parameters');
+                }
+                break;
+
+            case 'Twitter':
+                // Twitter-specific analysis
+                if (path.includes('/status/')) {
+                    points += 10;
+                    greenFlags.push('Valid Twitter post URL');
+                }
+
+                if (query.includes('utm_')) {
+                    points -= 10;
+                    redFlags.push('Twitter URL with tracking parameters');
+                }
+                break;
+
+            case 'Facebook':
+                // Facebook-specific analysis
+                if (path.includes('/posts/') || path.includes('/photo/')) {
+                    points += 10;
+                    greenFlags.push('Valid Facebook post URL');
+                }
+
+                if (query.includes('utm_')) {
+                    points -= 10;
+                    redFlags.push('Facebook URL with tracking parameters');
+                }
+                break;
         }
 
         details.push({
-            title: 'Platform-Specific Analysis',
-            value: platform.name === 'Unknown Platform' ? 'Unknown platform' : `Valid ${platform.name} URL`,
-            type: platform.name === 'Unknown Platform' ? 'negative' : 'positive'
+            title: 'Platform Analysis',
+            value: `${platform.name} specific checks`,
+            type: points > 0 ? 'positive' : 'negative'
         });
 
         return { points, redFlags, greenFlags, details };
     }
 
     detectPlatform(domain) {
-        const platforms = {
-            'youtube.com': { name: 'YouTube', type: 'video' },
-            'youtu.be': { name: 'YouTube', type: 'video' },
-            'instagram.com': { name: 'Instagram', type: 'social' },
-            'tiktok.com': { name: 'TikTok', type: 'video' },
-            'facebook.com': { name: 'Facebook', type: 'social' },
-            'fb.com': { name: 'Facebook', type: 'social' },
-            'twitter.com': { name: 'Twitter', type: 'social' },
-            'x.com': { name: 'Twitter', type: 'social' }
-        };
-
-        for (const [platformDomain, info] of Object.entries(platforms)) {
-            if (domain.includes(platformDomain)) {
-                return info;
-            }
+        if (domain.includes('youtube.com') || domain.includes('youtu.be')) {
+            return { name: 'YouTube', type: 'video' };
+        } else if (domain.includes('instagram.com')) {
+            return { name: 'Instagram', type: 'social' };
+        } else if (domain.includes('tiktok.com')) {
+            return { name: 'TikTok', type: 'video' };
+        } else if (domain.includes('facebook.com') || domain.includes('fb.com')) {
+            return { name: 'Facebook', type: 'social' };
+        } else if (domain.includes('twitter.com') || domain.includes('x.com')) {
+            return { name: 'Twitter', type: 'social' };
+        } else {
+            return { name: 'Unknown', type: 'unknown' };
         }
-
-        return { name: 'Unknown Platform', type: 'unknown' };
     }
 
     detectChannel(urlObj, platform) {
         const path = urlObj.pathname;
-        const query = urlObj.search;
         
-        // YouTube channel detection
-        if (platform.name === 'YouTube') {
-            // Check for channel URL patterns
-            if (path.includes('/channel/')) {
-                const channelId = path.split('/channel/')[1]?.split('/')[0];
-                return `YouTube Channel ID: ${channelId}`;
-            }
-            
-            // Check for user URL patterns
-            if (path.includes('/user/')) {
-                const username = path.split('/user/')[1]?.split('/')[0];
-                return `YouTube User: ${username}`;
-            }
-            
-            // Check for custom URL patterns
-            if (path.includes('/c/') || path.includes('/@')) {
-                const customName = path.split('/').find(part => part.startsWith('c/') || part.startsWith('@'));
-                if (customName) {
-                    const name = customName.replace('c/', '').replace('@', '');
-                    return `YouTube Channel: ${name}`;
+        switch (platform.name) {
+            case 'YouTube':
+                // Extract channel name from YouTube URL
+                const channelMatch = path.match(/\/(?:channel\/|user\/|c\/)([^\/\?]+)/);
+                if (channelMatch) {
+                    return channelMatch[1];
                 }
-            }
-            
-            // For regular video URLs, try to extract channel info from query params
-            if (query.includes('v=')) {
-                return 'YouTube Video (Channel info not available in URL)';
-            }
-        }
-        
-        // Instagram account detection
-        if (platform.name === 'Instagram') {
-            if (path.includes('/p/') || path.includes('/reel/')) {
-                const username = path.split('/')[1];
-                if (username && !username.includes('p') && !username.includes('reel')) {
-                    return `Instagram Account: @${username}`;
+                break;
+                
+            case 'Instagram':
+                // Extract username from Instagram URL
+                const instaMatch = path.match(/\/([^\/\?]+)(?:\/|$)/);
+                if (instaMatch && !instaMatch[1].includes('p') && !instaMatch[1].includes('reel')) {
+                    return instaMatch[1];
                 }
-            }
-        }
-        
-        // TikTok account detection
-        if (platform.name === 'TikTok') {
-            if (path.includes('/@')) {
-                const username = path.split('/@')[1]?.split('/')[0];
-                if (username) {
-                    return `TikTok Account: @${username}`;
+                break;
+                
+            case 'TikTok':
+                // Extract username from TikTok URL
+                const tiktokMatch = path.match(/\/([^\/\?]+)(?:\/video\/|$)/);
+                if (tiktokMatch) {
+                    return tiktokMatch[1];
                 }
-            }
-        }
-        
-        // Twitter/X account detection
-        if (platform.name === 'Twitter') {
-            if (path.includes('/status/')) {
-                const username = path.split('/')[1];
-                if (username && username !== 'status') {
-                    return `Twitter Account: @${username}`;
+                break;
+                
+            case 'Twitter':
+                // Extract username from Twitter URL
+                const twitterMatch = path.match(/\/([^\/\?]+)(?:\/status\/|$)/);
+                if (twitterMatch) {
+                    return twitterMatch[1];
                 }
-            }
+                break;
         }
         
         return null;
     }
 
     determineVerdict(score, analysisResults) {
-        // More nuanced verdict system
-        if (score >= 30) {
+        if (score >= 50) {
             return {
                 title: 'Likely Real',
-                description: 'This link appears to be legitimate based on our comprehensive analysis. It shows multiple positive indicators and few red flags.',
+                description: 'This link appears to be legitimate and safe to visit.',
                 icon: 'fas fa-check-circle',
                 class: 'real'
             };
-        } else if (score >= 10) {
+        } else if (score >= 20) {
             return {
                 title: 'Probably Real',
-                description: 'This link shows mostly legitimate characteristics with some minor concerns. Exercise normal caution.',
+                description: 'This link seems legitimate but exercise caution.',
                 icon: 'fas fa-check-circle',
                 class: 'real'
             };
-        } else if (score <= -30) {
+        } else if (score >= -20) {
             return {
-                title: 'Likely Fake',
-                description: 'This link shows multiple strong indicators of being fake or suspicious. Avoid clicking and verify independently.',
-                icon: 'fas fa-times-circle',
-                class: 'fake'
+                title: 'Uncertain',
+                description: 'Unable to determine with confidence. Proceed with caution.',
+                icon: 'fas fa-question-circle',
+                class: 'uncertain'
             };
-        } else if (score <= -10) {
+        } else if (score >= -50) {
             return {
                 title: 'Suspicious',
-                description: 'This link has concerning characteristics that suggest it may be fake. Exercise extreme caution.',
+                description: 'This link shows concerning patterns. Avoid if possible.',
                 icon: 'fas fa-exclamation-triangle',
                 class: 'fake'
             };
         } else {
             return {
-                title: 'Uncertain',
-                description: 'This link has mixed indicators. The analysis is inconclusive. Verify independently before proceeding.',
-                icon: 'fas fa-question-circle',
-                class: 'uncertain'
+                title: 'Likely Fake',
+                description: 'This link appears to be fake or malicious. Do not visit.',
+                icon: 'fas fa-times-circle',
+                class: 'fake'
             };
         }
     }
 
     displayResults(analysis) {
         this.hideLoading();
-
+        
+        const verdict = analysis.verdict;
+        const confidence = analysis.confidence;
+        
         // Update confidence meter
-        const confidenceFill = document.getElementById('confidenceFill');
-        const confidenceValue = document.getElementById('confidenceValue');
-        confidenceFill.style.width = `${analysis.confidence}%`;
-        confidenceValue.textContent = `${analysis.confidence}%`;
-
+        document.getElementById('confidenceFill').style.width = `${confidence}%`;
+        document.getElementById('confidenceValue').textContent = `${Math.round(confidence)}%`;
+        
         // Update verdict
         const verdictIcon = document.getElementById('verdictIcon');
-        const verdictTitle = document.getElementById('verdictTitle');
-        const verdictDescription = document.getElementById('verdictDescription');
-
-        verdictIcon.className = `verdict-icon ${analysis.verdict.class}`;
-        verdictIcon.innerHTML = `<i class="${analysis.verdict.icon}"></i>`;
-        verdictTitle.textContent = analysis.verdict.title;
-        verdictDescription.textContent = analysis.verdict.description;
-
-        // Update details grid
+        verdictIcon.className = `verdict-icon ${verdict.class}`;
+        verdictIcon.innerHTML = `<i class="${verdict.icon}"></i>`;
+        
+        document.getElementById('verdictTitle').textContent = verdict.title;
+        document.getElementById('verdictDescription').textContent = verdict.description;
+        
+        // Update analysis details
         const detailsGrid = document.getElementById('detailsGrid');
         detailsGrid.innerHTML = '';
+        
         analysis.details.forEach(detail => {
-            const detailElement = document.createElement('div');
-            detailElement.className = `detail-item ${detail.type}`;
-            detailElement.innerHTML = `
+            const detailItem = document.createElement('div');
+            detailItem.className = `detail-item ${detail.type}`;
+            detailItem.innerHTML = `
                 <h5>${detail.title}</h5>
                 <p>${detail.value}</p>
             `;
-            detailsGrid.appendChild(detailElement);
+            detailsGrid.appendChild(detailItem);
         });
-
+        
         // Update red flags
-        const redFlagsSection = document.getElementById('redFlags');
         const redFlagsList = document.getElementById('redFlagsList');
+        const redFlagsSection = document.getElementById('redFlags');
+        
         if (analysis.redFlags.length > 0) {
             redFlagsList.innerHTML = '';
             analysis.redFlags.forEach(flag => {
@@ -593,10 +820,11 @@ class SocialMediaAnalyzer {
         } else {
             redFlagsSection.style.display = 'none';
         }
-
+        
         // Update green flags
-        const greenFlagsSection = document.getElementById('greenFlags');
         const greenFlagsList = document.getElementById('greenFlagsList');
+        const greenFlagsSection = document.getElementById('greenFlags');
+        
         if (analysis.greenFlags.length > 0) {
             greenFlagsList.innerHTML = '';
             analysis.greenFlags.forEach(flag => {
@@ -608,9 +836,9 @@ class SocialMediaAnalyzer {
         } else {
             greenFlagsSection.style.display = 'none';
         }
-
+        
+        // Show results
         this.resultSection.style.display = 'block';
-        this.resultSection.scrollIntoView({ behavior: 'smooth' });
     }
 
     showLoading() {
@@ -623,6 +851,7 @@ class SocialMediaAnalyzer {
     }
 
     showError(message) {
+        this.hideLoading();
         alert(message);
     }
 }
